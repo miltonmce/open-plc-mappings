@@ -2,138 +2,144 @@ from pymodbus.client import ModbusTcpClient
 import os
 import time
 
+# --- CONFIGURACIÓN GLOBAL (Fácil de modificar) ---
 PLC_IP = '192.168.1.111'
-client = ModbusTcpClient(PLC_IP, port=502)
-BASE_SALIDAS = 1536 # La dirección que descubriste con tu barrido
+PORT = 502
+ID_DISPOSITIVO = 1  # Tu device_id que funciona
 
-def descubrir_y0():
+client = ModbusTcpClient(PLC_IP, port=PORT)
+
+# =========================================================
+# 1. ESCANEO DE BITS (COILS / DISCRETE INPUTS)
+# =========================================================
+
+def escanear_coils(inicio=1536, fin=3600):
+    """
+    Busca Coils (Y/M) activos. 
+    Retorna una lista en res.bits.
+    """
+    print(f"\n[SCAN] Buscando Coils activos entre {inicio} y {fin}...")
     if client.connect():
-        #addres: 1536,
-        for i in range(0,2400):
-            res = client.read_coils(address=i, count=1, device_id=1)
-            
+        for i in range(inicio, fin):
+            res = client.read_coils(address=i, count=1, device_id=ID_DISPOSITIVO)
             if not res.isError():
                 if True in res.bits:
-                    print(f"direccion {i}: {res.bits}")
-        client.close()
-
-def monitorear_salidas():
-    if not client.connect():
-        print("No se pudo conectar al PLC.")
-        return
-
-    try:
-        while True:
-            # Leer las 4 salidas (Y0, Y1, Y2, Y3) de un solo golpe
-            res = client.read_coils(address=BASE_SALIDAS, count=4, device_id=1)
-            
-            # Limpiar la terminal según el sistema operativo
-            # 'cls' para Windows, 'clear' para Linux/Mac
-            os.system('cls' if os.name == 'nt' else 'clear')
-            
-            if not res.isError():
-                # Formatear la salida para verla en una sola línea
-                estados = res.bits[:4]
-                linea = " | ".join([f"Y{i}: {'ON' if estado else 'OFF'}" for i, estado in enumerate(estados)])
-                print(f"Monitoreando PLC {PLC_IP} (Presione Ctrl+C para salir)")
-                print("-" * 50)
-                print(f"ESTADO ACTUAL: {linea}")
-            else:
-                print(f"Error de lectura: {res}")
-            
-            # Tiempo de espera entre lecturas (ajustable)
-            time.sleep(0.5) 
-
-    except KeyboardInterrupt:
-        print("\nMonitoreo detenido por el usuario.")
-    finally:
-        client.close()
-        print("Conexión cerrada.")
-
-
-
-def localizar_m0():
-    if client.connect():
-        print("--- Escaneando rango de memorias M (Buscando M0 en ON) ---")
-        
-        rangos = [(0, 8000)]
-        
-        #3072, 1536
-        for inicio, fin in rangos:
-            for i in range(inicio, fin):
-                res = client.read_coils(address=i, count=1, device_id=1)
-                if not res.isError():
-                    if res.bits[0] is True:
-                        print(f"¡BIT ENCONTRADO! Dirección Modbus {i} está en ON.")
+                    print(f"-> Dirección {i}: {res.bits}")
         client.close()
     else:
         print("Error de conexión.")
 
-
-#Componente PLC,Dirección Modbus (Decimal),Función Modbus
-#Y0,1536,Coil (0x01 / 0x05)
-#Y1,1537,Coil (0x01 / 0x05)
-#M0,3072,Coil (0x01 / 0x05)
-#M1,3073,Coil (0x01 / 0x05)
-#X0,1024,Discrete Input (0x02)
-
-
-M0_ADDRESS = 3073  # Tu descubrimiento
-Y0_ADDRESS = 1536  # Tu descubrimiento
-def control_y0_via_m0():
-    if client.connect():
-        # 1. Encendemos M0
-        print("Activando M0...")
-        client.write_coil(address=M0_ADDRESS, value=False, device_id=1)
-        time.sleep(0.5)
-        
-        # 2. Verificamos si Y0 se encendió (por la lógica del PLC)
-        res = client.read_coils(address=Y0_ADDRESS, count=1, device_id=1)
-        if not res.isError():
-            print(f"Estado de Y0: {'ENCENDIDO' if res.bits[0] else 'APAGADO'}")
-            
-        client.close()
-        
-def escanear_registros():
+def localizar_m0_on(inicio=0, fin=8000):
     """
-    V0=512
+    Escaneo amplio para encontrar memorias auxiliares (M) en estado ON.
     """
+    print(f"\n[SCAN] Localizando memorias M en ON (Rango {inicio}-{fin})...")
     if client.connect():
-        print("--- Escaneando Holding Registers (V/D y CV) ---")
-        # Probamos los bloques lógicos basados en tus hallazgos
-        
-        for base in range(0,16000):
-            # Leemos de 50 en 50 para no saturar
-            res = client.read_holding_registers(address=base, count=50, device_id=1)
+        for i in range(inicio, fin):
+            res = client.read_coils(address=i, count=1, device_id=ID_DISPOSITIVO)
             if not res.isError():
-                # Si ves un número diferente de 0, ¡ahí hay algo!
+                if res.bits[0] is True:
+                    print(f"¡BIT ENCONTRADO! Dirección Modbus {i} está en ON.")
+        client.close()
+
+# =========================================================
+# 2. ESCANEO DE REGISTROS (V / D / CV)
+# =========================================================
+
+def escanear_holding_registers(inicio=0, fin=16000, saltos=1):
+    """
+    Busca registros de datos (V o D). 
+    Recibe una lista en res.registers.
+    """
+    print(f"\n[SCAN] Buscando Holding Registers (V/D) entre {inicio} y {fin}...")
+    if client.connect():
+        for base in range(inicio, fin):
+            res = client.read_holding_registers(address=base, count=saltos, device_id=ID_DISPOSITIVO)
+            if not res.isError():
                 for i, valor in enumerate(res.registers):
                     if valor != 0:
-                        print(f"¡DATO ENCONTRADO! Dirección {base + i}: Valor = {valor}")
-            else:
-                print(f"Bloque {base} no disponible.")
+                        print(f"¡DATO! Dirección {base + i}: Valor = {valor}")
         client.close()
-        
-        
 
-def escanear_input_registers():
+def escanear_input_registers(inicio=16383, fin=16400):
+    """
+    Busca registros de entrada (CV / Contadores).
+    Función 04 de Modbus.
+    """
+    print(f"\n[SCAN] Buscando Input Registers (CV) entre {inicio} y {fin}...")
     if client.connect():
-        print("--- Escaneando Input Registers (Función 04) ---")
-        # Probamos los bloques donde tu PLC organiza la memoria
-        
-        for base in range(16383,16385):
-            # Leemos bloques de 100 registros
-            res = client.read_input_registers(address=base, count=100, device_id=1)
-            
+        for i in range(inicio, fin):
+            res = client.read_input_registers(address=i, count=1, device_id=ID_DISPOSITIVO)
             if not res.isError():
-                for i, valor in enumerate(res.registers):
-                    if valor != 0: # Si hay un valor, encontramos una variable activa
-                        print(f"¡REGISTRO ENCONTRADO! Dirección {base + i}: Valor = {valor}")
-            else:
-                print(f"Bloque {base}: No soportado o error.")
+                for idx, valor in enumerate(res.registers):
+                    if valor != 0:
+                        print(f"¡REGISTRO ENCONTRADO! Dirección {i}: Valor = {valor}")
         client.close()
-    else:
-        print("No se pudo conectar.")
+
+# =========================================================
+# 3. MONITOREO Y CONTROL
+# =========================================================
+
+def monitorear_salidas_y(base=1536, cant=4):
+    """
+    Monitoreo en tiempo real de las salidas Y.
+    """
+    if not client.connect(): return
+    print("Monitoreando... Ctrl+C para salir.")
+    try:
+        while True:
+            res = client.read_coils(address=base, count=cant, device_id=ID_DISPOSITIVO)
+            os.system('cls' if os.name == 'nt' else 'clear')
+            if not res.isError():
+                estados = res.bits[:cant]
+                linea = " | ".join([f"Y{i}: {'ON' if e else 'OFF'}" for i, e in enumerate(estados)])
+                print(f"MONITOREO PLC {PLC_IP} | Base: {base}")
+                print("-" * 50)
+                print(f"ESTADO ACTUAL: {linea}")
+            time.sleep(0.5)
+    except KeyboardInterrupt:
+        print("\nDetenido.")
+    finally:
+        client.close()
+
+def forzar_m_y_verificar(m_addr=3073, y_addr=1536):
+    """
+    Activa una memoria M y verifica el estado de una salida Y.
+    """
+    if client.connect():
+        print(f"Escribiendo False en M{m_addr}...")
+        client.write_coil(address=m_addr, value=False, device_id=ID_DISPOSITIVO)
+        time.sleep(0.5)
+        res = client.read_coils(address=y_addr, count=1, device_id=ID_DISPOSITIVO)
+        if not res.isError():
+            print(f"Estado de Y{y_addr}: {'ENCENDIDO' if res.bits[0] else 'APAGADO'}")
+        client.close()
+
+# =========================================================
+# 4. INTERFAZ DE SELECCIÓN
+# =========================================================
+
+def menu():
+    while True:
+        print("\n--- HERRAMIENTA DE MAPEO HNC ---")
+        print("1. Escanear Coils (Salidas/Memorias)")
+        print("2. Localizar M0 (Búsqueda ON)")
+        print("3. Monitorear Salidas Y (Tiempo Real)")
+        print("4. Escanear Holding Registers (V/D)")
+        print("5. Escanear Input Registers (CV/Contadores)")
+        print("6. Probar Trigger M -> Y")
+        print("0. Salir")
+        
+        op = input("\nSeleccione opción: ")
+
+        if op == "1": escanear_coils(inicio=1530, fin=1550)
+        elif op == "2": localizar_m0_on(inicio=3070, fin=3080)
+        elif op == "3": monitorear_salidas_y(base=1536)
+        elif op == "4": escanear_holding_registers(inicio=510, fin=520)
+        elif op == "5": escanear_input_registers(inicio=16380, fin=16400)
+        elif op == "6": forzar_m_y_verificar()
+        elif op == "0": break
+        else: print("Opción inválida.")
 
 if __name__ == "__main__":
-    escanear_input_registers()
+    menu()
