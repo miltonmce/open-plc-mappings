@@ -29,7 +29,7 @@ Estas direcciones son las que responden tras el barrido. Si usas el modo estánd
 ### Memorias Internas (M)
 * M0: Arranca en la 3072. Es la forma más fácil de mandar comandos desde Python al programa Ladder.
 
-### Contadores (CV - Totales de Pozo)
+### Contadores (CV - Totales)
 * CV0: Se encuentra en la dirección 16384.
 * Nota para 32 bits: Si el contador es de alta velocidad o un totalizador grande, usa dos registros. Para leerlo correctamente en Python:  
   `valor_total = (registro_alto << 16) + registro_bajo`
