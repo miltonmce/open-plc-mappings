@@ -48,7 +48,7 @@ Para totalizadores grandes o contadores rápidos (rango CV48 - CV79), el PLC usa
 
 ---
 
-## 📚 Direcciones Adicionales (Referencia de Manual)
+##  Direcciones Adicionales (Referencia de Manual)
 
 Estas direcciones forman parte de la ficha técnica de la serie HCS, pero **no fueron verificadas** en el barrido técnico inicial. Si las utilizas, asegúrate de probar primero el offset (sumar +1024 o +1536) si la dirección base no te responde:
 
@@ -72,7 +72,7 @@ Estas direcciones forman parte de la ficha técnica de la serie HCS, pero **no f
 
 ---
 
-## 💡 Notas para el desarrollador
+## Notas para el desarrollador
 
 1. **Temporizadores (T vs TV):** Si quieres saber si el tiempo acabó, lee la Coil en **15360**. Si quieres saber cuánto tiempo lleva exactamente, lee el Holding Register en **15360**.
 2. **Entradas Analógicas (AI):** A diferencia de las X/Y, las analógicas suelen mapearse en el bloque 0. Si no te responden ahí, intenta aplicar el mismo desplazamiento que usamos en las entradas digitales.
